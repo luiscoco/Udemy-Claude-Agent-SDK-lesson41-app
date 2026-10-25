@@ -12,7 +12,7 @@
     });
     if (request.failAppend)
       throw new Error(&quot;CLASSROOM-41: injected external mirror outage&quot;);
-    await backing.append(key, entries);</code></pre></section><section class="step workflow-step" id="workflow-step-03"><span class="number">03</span><h3>3. Preserve order and retry identity</h3><p>Preserve arrival order and use UUIDs as retry identities. Entries without UUIDs remain append-only metadata; do not discard or reinterpret their payloads.</p><p class="source">Source: src/store.ts · lines 57–65 · selected source; surrounding code omitted</p><pre><code class="language-typescript">const seen = new Set(
+    await backing.append(key, entries);</code></pre></section><section class="step workflow-step" id="workflow-step-03"><span class="number">03</span><h3>3. Preserve order and retry identity</h3><p>Preserve arrival order and use UUIDs as retry identities. Entries without UUIDs remain append-only metadata; do not discard or reinterpret their payloads.</p><p class="source">Source: src/store.ts · lines 57–67 · selected source; surrounding code omitted</p><pre><code class="language-typescript">const seen = new Set(
         row.entries.flatMap((e) =&gt;
           typeof e.uuid === &quot;string&quot; ? [e.uuid] : [],
         ),
@@ -20,7 +20,9 @@
       const accepted = snapshot.filter((e) =&gt; {
         if (typeof e.uuid !== &quot;string&quot;) return true;
         if (seen.has(e.uuid)) return false;
-        seen.add(e.uuid);</code></pre></section><section class="step workflow-step" id="workflow-step-04"><span class="number">04</span><h3>4. Load opaque stored entries</h3><p>Return the complete ordered entry array or null for an unknown key. The SDK materializes the returned history before resuming.</p><p class="source">Source: src/store.ts · lines 77–82 · selected source; surrounding code omitted</p><pre><code class="language-typescript">load(key: SessionKey): Promise&lt;SessionStoreEntry[] | null&gt; {
+        seen.add(e.uuid);
+        return true;
+      });</code></pre></section><section class="step workflow-step" id="workflow-step-04"><span class="number">04</span><h3>4. Load opaque stored entries</h3><p>Return the complete ordered entry array or null for an unknown key. The SDK materializes the returned history before resuming.</p><p class="source">Source: src/store.ts · lines 77–82 · selected source; surrounding code omitted</p><pre><code class="language-typescript">load(key: SessionKey): Promise&lt;SessionStoreEntry[] | null&gt; {
     return this.serial(
       async () =&gt;
         (await this.read()).find((r) =&gt; same(r.key, key))?.entries ?? null,
@@ -44,12 +46,12 @@ const store: SessionStore = {</code></pre></section><section class="step workflo
         observe(&quot;source-config-erased&quot;, {
           sourceAfterErase: (await w.inspect()).source,
         });
-      }</code></pre></section><section class="step workflow-step" id="workflow-step-09"><span class="number">09</span><h3>9. Resume in the clean target worker</h3><p>Start a new Node worker with a clean config directory, the same project working directory and the stored session ID. Actual load events prove retrieval through the adapter.</p><p class="source">Source: src/agent.ts · lines 180–185 · selected source; surrounding code omitted</p><pre><code class="language-typescript">&quot;Resume from external adapter&quot;,
+      }</code></pre></section><section class="step workflow-step" id="workflow-step-09"><span class="number">09</span><h3>9. Resume in the clean target worker</h3><p>Start a new Node worker with a clean config directory, the same project working directory and the stored session ID. Actual load events prove retrieval through the adapter.</p><p class="source">Source: src/agent.ts · lines 178–183 · selected source; surrounding code omitted</p><pre><code class="language-typescript">if (c.mode === &quot;file&quot; || c.mode === &quot;restart&quot;)
+        await call(
+          &quot;Resume from external adapter&quot;,
           { resume: id, prompt: RECALL },
           true,
-        );
-      if (c.mode === &quot;delete&quot;)
-        await call(</code></pre></section><section class="step workflow-step" id="workflow-step-10"><span class="number">10</span><h3>10. Read the native store catalog</h3><p>List sessions through the SDK helper with sessionStore attached, then retrieve their messages. No model query is needed for catalog inspection.</p><p class="source">Source: src/worker.ts · lines 69–76 · selected source; surrounding code omitted</p><pre><code class="language-typescript">const sessions = await listSessions({
+        );</code></pre></section><section class="step workflow-step" id="workflow-step-10"><span class="number">10</span><h3>10. Read the native store catalog</h3><p>List sessions through the SDK helper with sessionStore attached, then retrieve their messages. No model query is needed for catalog inspection.</p><p class="source">Source: src/worker.ts · lines 69–76 · selected source; surrounding code omitted</p><pre><code class="language-typescript">const sessions = await listSessions({
     dir: request.cwd,
     sessionStore: store,
     limit: 20,

@@ -112,7 +112,7 @@ async append(key, entries) {
 
 Preserve arrival order and use UUIDs as retry identities. Entries without UUIDs remain append-only metadata; do not discard or reinterpret their payloads.
 
-Source: `src/store.ts`, selected lines 57–65. Surrounding code omitted.
+Source: `src/store.ts`, selected lines 57–67. Surrounding code omitted.
 
 ```typescript
 const seen = new Set(
@@ -124,6 +124,8 @@ const seen = new Set(
         if (typeof e.uuid !== "string") return true;
         if (seen.has(e.uuid)) return false;
         seen.add(e.uuid);
+        return true;
+      });
 ```
 
 ### 4. Load opaque stored entries
@@ -204,15 +206,15 @@ await w.eraseSource();
 
 Start a new Node worker with a clean config directory, the same project working directory and the stored session ID. Actual load events prove retrieval through the adapter.
 
-Source: `src/agent.ts`, selected lines 180–185. Surrounding code omitted.
+Source: `src/agent.ts`, selected lines 178–183. Surrounding code omitted.
 
 ```typescript
-"Resume from external adapter",
+if (c.mode === "file" || c.mode === "restart")
+        await call(
+          "Resume from external adapter",
           { resume: id, prompt: RECALL },
           true,
         );
-      if (c.mode === "delete")
-        await call(
 ```
 
 ### 10. Read the native store catalog
@@ -290,7 +292,7 @@ persistSession: request.conflict === "persist" ? false : true,
 - [Official SDK session storage documentation](https://code.claude.com/docs/en/agent-sdk/session-storage)
 - [TypeScript SDK reference](https://code.claude.com/docs/en/agent-sdk/typescript)
 
-Regenerate student pages with `python scripts/build-pages.py`. Run `npm test` for offline boundaries, review lifecycle, workspace and startup checks.
+Regenerate student pages with `python scripts/build-pages.py`. Run `npm test` for official adapter contracts, UUID retries, ordering, workspace and startup checks.
 
 
 ## Reference backend integrations

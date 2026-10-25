@@ -108,11 +108,11 @@
       "number": 3,
       "title": "Preserve order and retry identity",
       "source": "src/store.ts",
-      "code": "const seen = new Set(\n        row.entries.flatMap((e) =>\n          typeof e.uuid === \"string\" ? [e.uuid] : [],\n        ),\n      );\n      const accepted = snapshot.filter((e) => {\n        if (typeof e.uuid !== \"string\") return true;\n        if (seen.has(e.uuid)) return false;\n        seen.add(e.uuid);",
+      "code": "const seen = new Set(\n        row.entries.flatMap((e) =>\n          typeof e.uuid === \"string\" ? [e.uuid] : [],\n        ),\n      );\n      const accepted = snapshot.filter((e) => {\n        if (typeof e.uuid !== \"string\") return true;\n        if (seen.has(e.uuid)) return false;\n        seen.add(e.uuid);\n        return true;\n      });",
       "language": "typescript",
       "explanation": "Preserve arrival order and use UUIDs as retry identities. Entries without UUIDs remain append-only metadata; do not discard or reinterpret their payloads.",
       "firstLine": 57,
-      "lastLine": 65,
+      "lastLine": 67,
       "anchors": [
         "const seen = new Set("
       ],
@@ -198,13 +198,13 @@
       "number": 9,
       "title": "Resume in the clean target worker",
       "source": "src/agent.ts",
-      "code": "\"Resume from external adapter\",\n          { resume: id, prompt: RECALL },\n          true,\n        );\n      if (c.mode === \"delete\")\n        await call(",
+      "code": "if (c.mode === \"file\" || c.mode === \"restart\")\n        await call(\n          \"Resume from external adapter\",\n          { resume: id, prompt: RECALL },\n          true,\n        );",
       "language": "typescript",
       "explanation": "Start a new Node worker with a clean config directory, the same project working directory and the stored session ID. Actual load events prove retrieval through the adapter.",
-      "firstLine": 180,
-      "lastLine": 185,
+      "firstLine": 178,
+      "lastLine": 183,
       "anchors": [
-        "\"Resume from external adapter\","
+        "if (c.mode === \"file\" || c.mode === \"restart\")"
       ],
       "sourceSHA256": "c3e9d9adf1ab38e505a4fa74646ce520f5701b6e00dc715cf0a7dd72f02aeee7",
       "narration": "Step 9. Start a new Node worker with a clean config directory, the same project working directory and the stored session ID. Actual load events prove retrieval through the adapter. This source excerpt shows the corresponding application statement."
