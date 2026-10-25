@@ -1,0 +1,273 @@
+{
+  "lanes": [
+    "Student UI",
+    "TypeScript host",
+    "SDK worker process",
+    "Local JSONL",
+    "SessionStore adapter"
+  ],
+  "arrows": [
+    [
+      0,
+      1,
+      "1. Validate the storage experiment"
+    ],
+    [
+      2,
+      4,
+      "2. Implement the mirror append contract"
+    ],
+    [
+      1,
+      4,
+      "3. Preserve order and retry identity"
+    ],
+    [
+      4,
+      2,
+      "4. Load opaque stored entries"
+    ],
+    [
+      1,
+      4,
+      "5. Use the SDK memory store"
+    ],
+    [
+      1,
+      2,
+      "6. Attach storage and session selectors"
+    ],
+    [
+      2,
+      1,
+      "7. Capture the actual native session ID"
+    ],
+    [
+      1,
+      3,
+      "8. Remove the source local config"
+    ],
+    [
+      1,
+      2,
+      "9. Resume in the clean target worker"
+    ],
+    [
+      4,
+      1,
+      "10. Read the native store catalog"
+    ],
+    [
+      1,
+      4,
+      "11. Delete through the SDK helper"
+    ],
+    [
+      2,
+      0,
+      "12. Surface a mirror outage"
+    ],
+    [
+      1,
+      2,
+      "13. Exercise incompatible options"
+    ]
+  ],
+  "steps": [
+    {
+      "number": 1,
+      "title": "Validate the storage experiment",
+      "source": "src/modes.ts",
+      "code": "export function validateConfig(value: unknown): RunConfig {\n  const c = value as Record<string, unknown>;\n  if (!c || typeof c !== \"object\" || !MODES.includes(c.mode as never))\n    throw new Error(\"Choose a listed storage experiment.\");\n  if (Object.keys(c).some((k) => k !== \"mode\"))\n    throw new Error(\"Only the classroom mode can be configured.\");\n  return { mode: c.mode as RunConfig[\"mode\"] };",
+      "language": "typescript",
+      "explanation": "Accept only fixed classroom scenarios. A browser request cannot supply arbitrary session IDs, filesystem paths or backend credentials.",
+      "firstLine": 3,
+      "lastLine": 9,
+      "anchors": [
+        "export function validateConfig(value: unknown): RunConfig {"
+      ],
+      "sourceSHA256": "e0de8c942b09d4873bcc721aafe4ed4ff3f48b08217f3ec2b677c6e0734fbaf6",
+      "narration": "Step 1. Accept only fixed classroom scenarios. A browser request cannot supply arbitrary session IDs, filesystem paths or backend credentials. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 2,
+      "title": "Implement the mirror append contract",
+      "source": "src/worker.ts",
+      "code": "async append(key, entries) {\n    send(\"store-append\", {\n      key,\n      count: entries.length,\n      failing: !!request.failAppend,\n    });\n    if (request.failAppend)\n      throw new Error(\"CLASSROOM-41: injected external mirror outage\");\n    await backing.append(key, entries);",
+      "language": "typescript",
+      "explanation": "The real SDK calls this adapter wrapper after local transcript writes. Record actual batch keys and counts, then pass opaque entries to the selected backing store.",
+      "firstLine": 37,
+      "lastLine": 45,
+      "anchors": [
+        "async append(key, entries) {"
+      ],
+      "sourceSHA256": "16b4cc0219d94d58502f1541fe7ef7a061b2562736e7aa433b3e14e03f519193",
+      "narration": "Step 2. The real SDK calls this adapter wrapper after local transcript writes. Record actual batch keys and counts, then pass opaque entries to the selected backing store. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 3,
+      "title": "Preserve order and retry identity",
+      "source": "src/store.ts",
+      "code": "const seen = new Set(\n        row.entries.flatMap((e) =>\n          typeof e.uuid === \"string\" ? [e.uuid] : [],\n        ),\n      );\n      const accepted = snapshot.filter((e) => {\n        if (typeof e.uuid !== \"string\") return true;\n        if (seen.has(e.uuid)) return false;\n        seen.add(e.uuid);",
+      "language": "typescript",
+      "explanation": "Preserve arrival order and use UUIDs as retry identities. Entries without UUIDs remain append-only metadata; do not discard or reinterpret their payloads.",
+      "firstLine": 57,
+      "lastLine": 65,
+      "anchors": [
+        "const seen = new Set("
+      ],
+      "sourceSHA256": "8475212603123671bca8f3698a84345730a82e6ae3f91aab6ae248c5367461cb",
+      "narration": "Step 3. Preserve arrival order and use UUIDs as retry identities. Entries without UUIDs remain append-only metadata; do not discard or reinterpret their payloads. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 4,
+      "title": "Load opaque stored entries",
+      "source": "src/store.ts",
+      "code": "load(key: SessionKey): Promise<SessionStoreEntry[] | null> {\n    return this.serial(\n      async () =>\n        (await this.read()).find((r) => same(r.key, key))?.entries ?? null,\n    );\n  }",
+      "language": "typescript",
+      "explanation": "Return the complete ordered entry array or null for an unknown key. The SDK materializes the returned history before resuming.",
+      "firstLine": 77,
+      "lastLine": 82,
+      "anchors": [
+        "load(key: SessionKey): Promise<SessionStoreEntry[] | null> {"
+      ],
+      "sourceSHA256": "8475212603123671bca8f3698a84345730a82e6ae3f91aab6ae248c5367461cb",
+      "narration": "Step 4. Return the complete ordered entry array or null for an unknown key. The SDK materializes the returned history before resuming. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 5,
+      "title": "Use the SDK memory store",
+      "source": "src/worker.ts",
+      "code": "const backing =\n  request.kind === \"memory\"\n    ? new InMemorySessionStore()\n    : new FileSessionStore(request.storeRoot);\nconst store: SessionStore = {",
+      "language": "typescript",
+      "explanation": "The quick-start experiment uses the real SDK InMemorySessionStore. File experiments create a new file-backed adapter instance in each worker.",
+      "firstLine": 32,
+      "lastLine": 36,
+      "anchors": [
+        "const backing ="
+      ],
+      "sourceSHA256": "16b4cc0219d94d58502f1541fe7ef7a061b2562736e7aa433b3e14e03f519193",
+      "narration": "Step 5. The quick-start experiment uses the real SDK InMemorySessionStore. File experiments create a new file-backed adapter instance in each worker. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 6,
+      "title": "Attach storage and session selectors",
+      "source": "src/worker.ts",
+      "code": "sessionStore: store,\n    limit: 20,\n  });\n  const messages = [];\n  for (const s of sessions)\n    messages.push({\n      sessionId: s.sessionId,",
+      "language": "typescript",
+      "explanation": "Pass the actual adapter to query. Eager flushing exposes append events; resume or continue selects previously stored history. The working directory must match.",
+      "firstLine": 71,
+      "lastLine": 77,
+      "anchors": [
+        "sessionStore: store,"
+      ],
+      "sourceSHA256": "16b4cc0219d94d58502f1541fe7ef7a061b2562736e7aa433b3e14e03f519193",
+      "narration": "Step 6. Pass the actual adapter to query. Eager flushing exposes append events; resume or continue selects previously stored history. The working directory must match. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 7,
+      "title": "Capture the actual native session ID",
+      "source": "src/worker.ts",
+      "code": "if (message.type === \"system\" && message.subtype === \"init\")\n        send(\"init\", { pid: process.pid, sessionId: message.session_id });\n      if (message.type === \"system\" && message.subtype === \"mirror_error\")\n        send(\"mirror-error\", message);\n      if (message.type === \"assistant\")\n        for (const b of message.message.content)",
+      "language": "typescript",
+      "explanation": "Capture system/init identifiers and actual result IDs. New worker process IDs make process boundaries distinct from conversation identity.",
+      "firstLine": 121,
+      "lastLine": 126,
+      "anchors": [
+        "if (message.type === \"system\" && message.subtype === \"init\")"
+      ],
+      "sourceSHA256": "16b4cc0219d94d58502f1541fe7ef7a061b2562736e7aa433b3e14e03f519193",
+      "narration": "Step 7. Capture system/init identifiers and actual result IDs. New worker process IDs make process boundaries distinct from conversation identity. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 8,
+      "title": "Remove the source local config",
+      "source": "src/agent.ts",
+      "code": "await w.eraseSource();\n        observe(\"source-config-erased\", {\n          sourceAfterErase: (await w.inspect()).source,\n        });\n      }",
+      "language": "typescript",
+      "explanation": "The restart experiment removes only its own temporary source config. The external adapter stays outside that directory and survives until evidence collection finishes.",
+      "firstLine": 173,
+      "lastLine": 177,
+      "anchors": [
+        "await w.eraseSource();"
+      ],
+      "sourceSHA256": "c3e9d9adf1ab38e505a4fa74646ce520f5701b6e00dc715cf0a7dd72f02aeee7",
+      "narration": "Step 8. The restart experiment removes only its own temporary source config. The external adapter stays outside that directory and survives until evidence collection finishes. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 9,
+      "title": "Resume in the clean target worker",
+      "source": "src/agent.ts",
+      "code": "\"Resume from external adapter\",\n          { resume: id, prompt: RECALL },\n          true,\n        );\n      if (c.mode === \"delete\")\n        await call(",
+      "language": "typescript",
+      "explanation": "Start a new Node worker with a clean config directory, the same project working directory and the stored session ID. Actual load events prove retrieval through the adapter.",
+      "firstLine": 180,
+      "lastLine": 185,
+      "anchors": [
+        "\"Resume from external adapter\","
+      ],
+      "sourceSHA256": "c3e9d9adf1ab38e505a4fa74646ce520f5701b6e00dc715cf0a7dd72f02aeee7",
+      "narration": "Step 9. Start a new Node worker with a clean config directory, the same project working directory and the stored session ID. Actual load events prove retrieval through the adapter. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 10,
+      "title": "Read the native store catalog",
+      "source": "src/worker.ts",
+      "code": "const sessions = await listSessions({\n    dir: request.cwd,\n    sessionStore: store,\n    limit: 20,\n  });\n  const messages = [];\n  for (const s of sessions)\n    messages.push({",
+      "language": "typescript",
+      "explanation": "List sessions through the SDK helper with sessionStore attached, then retrieve their messages. No model query is needed for catalog inspection.",
+      "firstLine": 69,
+      "lastLine": 76,
+      "anchors": [
+        "const sessions = await listSessions({"
+      ],
+      "sourceSHA256": "16b4cc0219d94d58502f1541fe7ef7a061b2562736e7aa433b3e14e03f519193",
+      "narration": "Step 10. List sessions through the SDK helper with sessionStore attached, then retrieve their messages. No model query is needed for catalog inspection. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 11,
+      "title": "Delete through the SDK helper",
+      "source": "src/worker.ts",
+      "code": "await deleteSession(request.resume!, {\n      dir: request.cwd,\n      sessionStore: store,\n    });\n    await catalog();",
+      "language": "typescript",
+      "explanation": "Delete the external main transcript and its subkeys through the actual SDK helper. The original local transcript is a separate copy.",
+      "firstLine": 150,
+      "lastLine": 154,
+      "anchors": [
+        "await deleteSession(request.resume!, {"
+      ],
+      "sourceSHA256": "16b4cc0219d94d58502f1541fe7ef7a061b2562736e7aa433b3e14e03f519193",
+      "narration": "Step 11. Delete the external main transcript and its subkeys through the actual SDK helper. The original local transcript is a separate copy. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 12,
+      "title": "Surface a mirror outage",
+      "source": "src/worker.ts",
+      "code": "if (message.type === \"system\" && message.subtype === \"mirror_error\")\n        send(\"mirror-error\", message);\n      if (message.type === \"assistant\")\n        for (const b of message.message.content)\n          if (b.type === \"text\") send(\"answer\", b.text);",
+      "language": "typescript",
+      "explanation": "Capture native mirror_error system messages after bounded failed append attempts. A successful local result does not imply external durability.",
+      "firstLine": 123,
+      "lastLine": 127,
+      "anchors": [
+        "if (message.type === \"system\" && message.subtype === \"mirror_error\")"
+      ],
+      "sourceSHA256": "16b4cc0219d94d58502f1541fe7ef7a061b2562736e7aa433b3e14e03f519193",
+      "narration": "Step 12. Capture native mirror_error system messages after bounded failed append attempts. A successful local result does not imply external durability. This source excerpt shows the corresponding application statement."
+    },
+    {
+      "number": 13,
+      "title": "Exercise incompatible options",
+      "source": "src/worker.ts",
+      "code": "persistSession: request.conflict === \"persist\" ? false : true,\n    enableFileCheckpointing: request.conflict === \"checkpoint\",\n    maxTurns: 3,\n    maxBudgetUsd: 0.25,\n    effort: \"low\",\n    thinking: { type: \"disabled\" },",
+      "language": "typescript",
+      "explanation": "The conflicts scenario deliberately combines sessionStore with persistSession false or file checkpointing. Actual SDK startup exceptions are shown, followed by a valid run.",
+      "firstLine": 106,
+      "lastLine": 111,
+      "anchors": [
+        "persistSession: request.conflict === \"persist\" ? false : true,"
+      ],
+      "sourceSHA256": "16b4cc0219d94d58502f1541fe7ef7a061b2562736e7aa433b3e14e03f519193",
+      "narration": "Step 13. The conflicts scenario deliberately combines sessionStore with persistSession false or file checkpointing. Actual SDK startup exceptions are shown, followed by a valid run. This source excerpt shows the corresponding application statement."
+    }
+  ]
+}

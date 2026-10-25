@@ -1,0 +1,72 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Agent SDK LESSON 41 · Architecture and &lt;em&gt;UML workflow.&lt;/em&gt;</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/code-highlighting.css"></head><body><main><div class="brand"><a href="/">How <span>Claude Agent SDK</span> Works</a><span class="badge">LESSON 41 / EXTERNAL SESSION STORAGE</span></div><header class="hero"><div><div class="eyebrow">MIRROR · PERSIST · RESTORE</div><h1>Architecture and <em>UML workflow.</em></h1><p class="lead">Every workflow step includes its corresponding coloured code excerpt.</p></div><img src="/astronaut.png" alt="Course astronaut mascot"></header><nav class="nav" aria-label="Application sections"><a href="/">Application lab</a><a href="/learn.html">What you will learn</a><a href="/run.html">How to run</a><a href="/architecture.html" aria-current="page">Architecture & workflow</a><a href="/walkthrough.html">Code walkthrough</a><button id="theme" type="button">Dark mode</button></nav><p class="note">The diagram groups actual worker calls, local-first transcript mirroring, external adapter operations and store-backed resume. Numbered steps group teaching scenarios rather than one required universal sequence.</p><a class="button" href="/architecture.svg" download>Download UML SVG</a><div class="diagram"><img src="/architecture.svg" alt="Thirteen source-linked session workflow steps"></div><section class="step workflow-step" id="workflow-step-01"><span class="number">01</span><h3>1. Validate the storage experiment</h3><p>Accept only fixed classroom scenarios. A browser request cannot supply arbitrary session IDs, filesystem paths or backend credentials.</p><p class="source">Source: src/modes.ts · lines 3–9 · selected source; surrounding code omitted</p><pre><code class="language-typescript">export function validateConfig(value: unknown): RunConfig {
+  const c = value as Record&lt;string, unknown&gt;;
+  if (!c || typeof c !== &quot;object&quot; || !MODES.includes(c.mode as never))
+    throw new Error(&quot;Choose a listed storage experiment.&quot;);
+  if (Object.keys(c).some((k) =&gt; k !== &quot;mode&quot;))
+    throw new Error(&quot;Only the classroom mode can be configured.&quot;);
+  return { mode: c.mode as RunConfig[&quot;mode&quot;] };</code></pre></section><section class="step workflow-step" id="workflow-step-02"><span class="number">02</span><h3>2. Implement the mirror append contract</h3><p>The real SDK calls this adapter wrapper after local transcript writes. Record actual batch keys and counts, then pass opaque entries to the selected backing store.</p><p class="source">Source: src/worker.ts · lines 37–45 · selected source; surrounding code omitted</p><pre><code class="language-typescript">async append(key, entries) {
+    send(&quot;store-append&quot;, {
+      key,
+      count: entries.length,
+      failing: !!request.failAppend,
+    });
+    if (request.failAppend)
+      throw new Error(&quot;CLASSROOM-41: injected external mirror outage&quot;);
+    await backing.append(key, entries);</code></pre></section><section class="step workflow-step" id="workflow-step-03"><span class="number">03</span><h3>3. Preserve order and retry identity</h3><p>Preserve arrival order and use UUIDs as retry identities. Entries without UUIDs remain append-only metadata; do not discard or reinterpret their payloads.</p><p class="source">Source: src/store.ts · lines 57–65 · selected source; surrounding code omitted</p><pre><code class="language-typescript">const seen = new Set(
+        row.entries.flatMap((e) =&gt;
+          typeof e.uuid === &quot;string&quot; ? [e.uuid] : [],
+        ),
+      );
+      const accepted = snapshot.filter((e) =&gt; {
+        if (typeof e.uuid !== &quot;string&quot;) return true;
+        if (seen.has(e.uuid)) return false;
+        seen.add(e.uuid);</code></pre></section><section class="step workflow-step" id="workflow-step-04"><span class="number">04</span><h3>4. Load opaque stored entries</h3><p>Return the complete ordered entry array or null for an unknown key. The SDK materializes the returned history before resuming.</p><p class="source">Source: src/store.ts · lines 77–82 · selected source; surrounding code omitted</p><pre><code class="language-typescript">load(key: SessionKey): Promise&lt;SessionStoreEntry[] | null&gt; {
+    return this.serial(
+      async () =&gt;
+        (await this.read()).find((r) =&gt; same(r.key, key))?.entries ?? null,
+    );
+  }</code></pre></section><section class="step workflow-step" id="workflow-step-05"><span class="number">05</span><h3>5. Use the SDK memory store</h3><p>The quick-start experiment uses the real SDK InMemorySessionStore. File experiments create a new file-backed adapter instance in each worker.</p><p class="source">Source: src/worker.ts · lines 32–36 · selected source; surrounding code omitted</p><pre><code class="language-typescript">const backing =
+  request.kind === &quot;memory&quot;
+    ? new InMemorySessionStore()
+    : new FileSessionStore(request.storeRoot);
+const store: SessionStore = {</code></pre></section><section class="step workflow-step" id="workflow-step-06"><span class="number">06</span><h3>6. Attach storage and session selectors</h3><p>Pass the actual adapter to query. Eager flushing exposes append events; resume or continue selects previously stored history. The working directory must match.</p><p class="source">Source: src/worker.ts · lines 71–77 · selected source; surrounding code omitted</p><pre><code class="language-typescript">sessionStore: store,
+    limit: 20,
+  });
+  const messages = [];
+  for (const s of sessions)
+    messages.push({
+      sessionId: s.sessionId,</code></pre></section><section class="step workflow-step" id="workflow-step-07"><span class="number">07</span><h3>7. Capture the actual native session ID</h3><p>Capture system/init identifiers and actual result IDs. New worker process IDs make process boundaries distinct from conversation identity.</p><p class="source">Source: src/worker.ts · lines 121–126 · selected source; surrounding code omitted</p><pre><code class="language-typescript">if (message.type === &quot;system&quot; &amp;&amp; message.subtype === &quot;init&quot;)
+        send(&quot;init&quot;, { pid: process.pid, sessionId: message.session_id });
+      if (message.type === &quot;system&quot; &amp;&amp; message.subtype === &quot;mirror_error&quot;)
+        send(&quot;mirror-error&quot;, message);
+      if (message.type === &quot;assistant&quot;)
+        for (const b of message.message.content)</code></pre></section><section class="step workflow-step" id="workflow-step-08"><span class="number">08</span><h3>8. Remove the source local config</h3><p>The restart experiment removes only its own temporary source config. The external adapter stays outside that directory and survives until evidence collection finishes.</p><p class="source">Source: src/agent.ts · lines 173–177 · selected source; surrounding code omitted</p><pre><code class="language-typescript">await w.eraseSource();
+        observe(&quot;source-config-erased&quot;, {
+          sourceAfterErase: (await w.inspect()).source,
+        });
+      }</code></pre></section><section class="step workflow-step" id="workflow-step-09"><span class="number">09</span><h3>9. Resume in the clean target worker</h3><p>Start a new Node worker with a clean config directory, the same project working directory and the stored session ID. Actual load events prove retrieval through the adapter.</p><p class="source">Source: src/agent.ts · lines 180–185 · selected source; surrounding code omitted</p><pre><code class="language-typescript">&quot;Resume from external adapter&quot;,
+          { resume: id, prompt: RECALL },
+          true,
+        );
+      if (c.mode === &quot;delete&quot;)
+        await call(</code></pre></section><section class="step workflow-step" id="workflow-step-10"><span class="number">10</span><h3>10. Read the native store catalog</h3><p>List sessions through the SDK helper with sessionStore attached, then retrieve their messages. No model query is needed for catalog inspection.</p><p class="source">Source: src/worker.ts · lines 69–76 · selected source; surrounding code omitted</p><pre><code class="language-typescript">const sessions = await listSessions({
+    dir: request.cwd,
+    sessionStore: store,
+    limit: 20,
+  });
+  const messages = [];
+  for (const s of sessions)
+    messages.push({</code></pre></section><section class="step workflow-step" id="workflow-step-11"><span class="number">11</span><h3>11. Delete through the SDK helper</h3><p>Delete the external main transcript and its subkeys through the actual SDK helper. The original local transcript is a separate copy.</p><p class="source">Source: src/worker.ts · lines 150–154 · selected source; surrounding code omitted</p><pre><code class="language-typescript">await deleteSession(request.resume!, {
+      dir: request.cwd,
+      sessionStore: store,
+    });
+    await catalog();</code></pre></section><section class="step workflow-step" id="workflow-step-12"><span class="number">12</span><h3>12. Surface a mirror outage</h3><p>Capture native mirror_error system messages after bounded failed append attempts. A successful local result does not imply external durability.</p><p class="source">Source: src/worker.ts · lines 123–127 · selected source; surrounding code omitted</p><pre><code class="language-typescript">if (message.type === &quot;system&quot; &amp;&amp; message.subtype === &quot;mirror_error&quot;)
+        send(&quot;mirror-error&quot;, message);
+      if (message.type === &quot;assistant&quot;)
+        for (const b of message.message.content)
+          if (b.type === &quot;text&quot;) send(&quot;answer&quot;, b.text);</code></pre></section><section class="step workflow-step" id="workflow-step-13"><span class="number">13</span><h3>13. Exercise incompatible options</h3><p>The conflicts scenario deliberately combines sessionStore with persistSession false or file checkpointing. Actual SDK startup exceptions are shown, followed by a valid run.</p><p class="source">Source: src/worker.ts · lines 106–111 · selected source; surrounding code omitted</p><pre><code class="language-typescript">persistSession: request.conflict === &quot;persist&quot; ? false : true,
+    enableFileCheckpointing: request.conflict === &quot;checkpoint&quot;,
+    maxTurns: 3,
+    maxBudgetUsd: 0.25,
+    effort: &quot;low&quot;,
+    thinking: { type: &quot;disabled&quot; },</code></pre></section><footer>CLAUDE AGENT SDK · LESSON 41 · TRANSCRIPTS · STORES · RESTORE<br>TypeScript · local runtime · API key stays on the server</footer></main><script src="/navigation.js"></script><script src="/prism.js"></script><script src="/prism-markup.min.js"></script><script src="/prism-yaml.min.js"></script><script src="/prism-markdown.min.js"></script><script src="/prism-python.min.js"></script><script src="/code-highlighting.js"></script><script src="/marked.umd.js"></script><script src="/purify.min.js"></script></body></html>
