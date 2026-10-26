@@ -137,6 +137,9 @@ const server = createServer(async (req, res) => {
         "Cache-Control": "no-store",
         "X-Accel-Buffering": "no",
       });
+      const heartbeat = setInterval(() => {
+        if (!res.destroyed) res.write(": keep-alive\n\n");
+      }, 15_000);
       const emit = (event: unknown) => {
         if (!res.destroyed)
           res.write("data: " + JSON.stringify(event) + "\n\n");
@@ -152,6 +155,7 @@ const server = createServer(async (req, res) => {
         });
       } finally {
         clearTimeout(timer);
+        clearInterval(heartbeat);
         busy = false;
         if (!res.destroyed) res.end();
       }
